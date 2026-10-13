@@ -1,0 +1,128 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Connection testing endpoint
+    match /test/{docId} {
+      allow get: if true;
+    }
+
+    // --- Global Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // --- Validation Blueprints ---
+    function isValidGame(data) {
+      return data.keys().hasAll(['id', 'gameCode', 'mode', 'creatorId', 'playerX', 'status', 'currentTurn', 'createdAt', 'updatedAt'])
+        && data.id is string && data.id.size() <= 128
+        && data.gameCode is string && data.gameCode.size() <= 12
+        && data.mode in ['ai', 'pvp']
+        && (data.aiDifficulty == null || data.aiDifficulty in ['easy', 'medium', 'hard', 'none'])
+        && data.creatorId is string && data.creatorId.size() <= 128
+        && (data.creatorDisplayName == null || (data.creatorDisplayName is string && data.creatorDisplayName.size() <= 128))
+        && (data.creatorPhotoURL == null || (data.creatorPhotoURL is string && data.creatorPhotoURL.size() <= 500))
+        && data.playerX is map
+        && data.playerX.uid is string && data.playerX.uid.size() <= 128
+        && (data.playerO == null || (data.playerO is map && data.playerO.uid is string && data.playerO.uid.size() <= 128))
+        && data.status in ['waiting', 'in_progress', 'finished', 'abandoned']
+        && (data.winner == null || data.winner in ['X', 'O', 'draw', 'none'])
+        && data.currentTurn in ['X', 'O']
+        && (data.moveCount == null || data.moveCount is number);
+    }
+
+    function isValidGameEvent(data) {
+      return data.keys().hasAll(['id', 'gameId', 'eventIndex', 'type', 'timestamp'])
+        && data.id is string && data.id.size() <= 128
+        && data.gameId is string && data.gameId.size() <= 128
+        && data.eventIndex is number && data.eventIndex >= 0
+        && data.type in ['MOVE', 'ROLLBACK']
+        && (data.turnNumber == null || data.turnNumber is number)
+        && (data.player == null || data.player in ['X', 'O', 'none'])
+        && (data.playerId == null || (data.playerId is string && data.playerId.size() <= 128))
+        && (data.cellIndex == null || (data.cellIndex is number && data.cellIndex >= 0 && data.cellIndex <= 8))
+        && (data.targetTurn == null || (data.targetTurn is number && data.targetTurn >= 0));
+    }
+
+    // --- Collection: Games ---
+    match /games/{gameId} {
+      allow get: if isSignedIn() && isValidId(gameId);
+      allow list: if isSignedIn();
+
+      allow create: if isSignedIn()
+        && isValidId(gameId)
+        && isValidGame(incoming())
+        && incoming().id == gameId
+        && incoming().creatorId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isSignedIn()
+        && isValidId(gameId)
+        && isValidGame(incoming())
+        && incoming().id == existing().id
+        && incoming().creatorId == existing().creatorId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action: Opponent joins a waiting game
+          (
+            existing().status == 'waiting'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['playerO', 'status', 'updatedAt'])
+            && incoming().playerO is map
+            && incoming().playerO.uid == request.auth.uid
+            && incoming().status in ['in_progress', 'waiting']
+          )
+          ||
+          // Action: Game state progression / sync (Move, Turn change, Win/Draw, Rollback Sync)
+          (
+            (request.auth.uid == existing().playerX.uid || (existing().playerO != null && request.auth.uid == existing().playerO.uid))
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'winner', 'currentTurn', 'moveCount', 'updatedAt'])
+          )
+        );
+
+      allow delete: if false;
+
+      // --- Subcollection: Events (Event-Sourcing Append-Only Log) ---
+      match /events/{eventId} {
+        allow get, list: if isSignedIn() && isValidId(gameId) && isValidId(eventId);
+
+        allow create: if isSignedIn()
+          && isValidId(gameId)
+          && isValidId(eventId)
+          && isValidGameEvent(incoming())
+          && incoming().id == eventId
+          && incoming().gameId == gameId
+          && incoming().timestamp == request.time
+          && exists(/databases/$(database)/documents/games/$(gameId))
+          && (
+            get(/databases/$(database)/documents/games/$(gameId)).data.playerX.uid == request.auth.uid
+            || (
+              get(/databases/$(database)/documents/games/$(gameId)).data.playerO != null
+              && get(/databases/$(database)/documents/games/$(gameId)).data.playerO.uid == request.auth.uid
+            )
+          );
+
+        // Events are immutable in event sourcing
+        allow update, delete: if false;
+      }
+    }
+  }
+}

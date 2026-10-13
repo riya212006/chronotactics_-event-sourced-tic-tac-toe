@@ -1,0 +1,126 @@
+{
+  "entities": {
+    "Game": {
+      "title": "Game",
+      "description": "Represents a Tic-Tac-Toe match between two users or against an AI player.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "gameCode": {
+          "type": "string",
+          "maxLength": 10,
+          "pattern": "^[A-Z0-9]+$"
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["ai", "pvp"]
+        },
+        "aiDifficulty": {
+          "type": "string",
+          "enum": ["easy", "medium", "hard", "none"]
+        },
+        "creatorId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "creatorDisplayName": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "creatorPhotoURL": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "playerX": {
+          "type": "object",
+          "description": "Player playing as X"
+        },
+        "playerO": {
+          "type": "object",
+          "description": "Player playing as O or AI"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["waiting", "in_progress", "finished", "abandoned"]
+        },
+        "winner": {
+          "type": "string",
+          "enum": ["X", "O", "draw", "none"]
+        },
+        "currentTurn": {
+          "type": "string",
+          "enum": ["X", "O"]
+        },
+        "moveCount": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "gameCode", "mode", "creatorId", "playerX", "status", "currentTurn"]
+    },
+    "GameEvent": {
+      "title": "GameEvent",
+      "description": "An event document in the subcollection representing a move turn or rollback in the game.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "gameId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "eventIndex": {
+          "type": "number"
+        },
+        "turnNumber": {
+          "type": "number"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["MOVE", "ROLLBACK"]
+        },
+        "player": {
+          "type": "string",
+          "enum": ["X", "O", "none"]
+        },
+        "playerId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "cellIndex": {
+          "type": "number"
+        },
+        "targetTurn": {
+          "type": "number"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "gameId", "eventIndex", "type", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/games/{gameId}": {
+      "schema": "Game",
+      "description": "Stores high-level metadata and current summary status for a game match."
+    },
+    "/games/{gameId}/events/{eventId}": {
+      "schema": "GameEvent",
+      "description": "Subcollection containing event documents for each move and rollback."
+    }
+  }
+}

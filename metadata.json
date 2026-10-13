@@ -1,0 +1,6 @@
+{
+  "name": "Chronotactics: Event-Sourced Tic-Tac-Toe",
+  "description": "Real-time multiplayer and AI Tic-Tac-Toe powered by Firebase with turn-by-turn event sourcing, game code sharing, and interactive time-travel rewind.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
